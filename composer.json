@@ -1,0 +1,7 @@
+{
+    "require": {
+        "phpoffice/phpspreadsheet": "^4.3",
+        "firebase/php-jwt": "^6.11",
+        "google/auth": "^1.47"
+    }
+}
