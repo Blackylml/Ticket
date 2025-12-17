@@ -1,0 +1,674 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[spanish]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{setspace}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\geometry{margin=2.5cm}
+\onehalfspacing
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    breakatwhitespace=true,
+    frame=lines,
+    framesep=8pt,
+    rulecolor=\color{gray},
+    language=PHP,
+    keywordstyle=\color{black},
+    commentstyle=\color{gray},
+    stringstyle=\color{black},
+    numberstyle=\tiny\color{gray},
+    showstringspaces=false,
+    tabsize=2,
+    captionpos=b
+}
+
+\lstdefinelanguage{JavaScript}{
+    keywords={function,var,let,const,if,else,for,while,do,switch,case,default,return,async,await,try,catch,fetch},
+    morecomment=[l]{//},
+    morecomment=[s]{/*}{*/},
+    morestring=[b]",
+    sensitive=true
+}
+
+\lstdefinelanguage{HTML}{
+    keywords={html,head,body,div,p,h1,h2,h3,h4,h5,h6,span,a,button,form,input,label,select,textarea,modal},
+    morecomment=[s]{<!--}{-->},
+    morestring=[b]",
+    sensitive=false
+}
+
+\lstdefinelanguage{CSS}{
+    keywords={color,background,font-size,border,margin,padding,display,flex,grid,width,height},
+    morecomment=[s]{/*}{*/},
+    morestring=[b]",
+    sensitive=false
+}
+
+\title{\textbf{Documentación Técnica para Auditoría}\\
+\vspace{0.5cm}
+\large{Sistema de Tickets IT}}
+
+\author{Documento Técnico}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\newpage
+
+\section{Portada Administrativa}
+
+\subsection{Denominación del Sistema}
+Sistema de Gestión de Tickets para Soporte Técnico de Tecnología de Información.
+
+\subsection{Clasificación del Documento}
+Documentación Técnica para Auditoría - Análisis Formal de Componentes.
+
+\subsection{Tecnologías Implementadas}
+\begin{itemize}
+    \item Backend: PHP 7.4+ con PDO
+    \item Base de Datos: MySQL/MariaDB
+    \item Frontend: HTML5, CSS3, JavaScript Vanilla
+    \item Framework CSS: Bootstrap 5.3.0
+    \item Iconografía: FontAwesome 6.0.0
+    \item Librerías PHP: PhpSpreadsheet, Firebase JWT, Google Auth
+    \item Gestión de Paquetes: Composer
+\end{itemize}
+
+\subsection{Fecha de Generación}
+\today
+
+\newpage
+
+\section{Alcance del Documento}
+
+Este documento técnico de auditoría cubre los siguientes componentes del sistema:
+
+\begin{itemize}
+    \item Componentes Backend PHP: Módulo de configuración de base de datos, ruteador principal API, endpoints de tickets autenticados y públicos, módulo de reportes Excel.
+    \item Componentes Frontend: Vistas principales (índice público, login, dashboard de usuarios, panel administrativo).
+    \item Componentes JavaScript: Lógica de formularios, consumo de APIs, manipulación del DOM, control de eventos, validaciones de cliente.
+    \item Componentes de Estilo: Estilos CSS embebidos en vistas HTML, paleta de colores, componentes visuales, estados y disposiciones responsivas.
+\end{itemize}
+
+No incluye análisis de la base de datos, migraciones SQL, gestión de sesiones a nivel de servidor no documentada en código, o comportamientos de librerías externas más allá de su integración en el código fuente.
+
+\newpage
+
+\section{Descripción General del Sistema}
+
+El sistema de gestión de tickets constituye una plataforma web servidor-renderizada que facilita la creación y seguimiento de solicitudes de soporte técnico. Integra tres portales diferenciados: acceso público sin autenticación para creación de tickets mediante número de ficha y nombre, panel de usuario autenticado para consulta y seguimiento de tickets propios, y panel administrativo restringido para personal de tecnología encargado de asignación y resolución de incidencias. La arquitectura implementa separación de responsabilidades mediante ruteador API centralizado y endpoints especializados, autenticación basada en sesiones PHP, almacenamiento relacional en MySQL, y generación de reportes en formato Excel. El flujo operativo contempla identificación del solicitante, creación de ticket con categorización y priorización, visualización de personal IT disponible, asignación a técnico responsable, seguimiento del estado de resolución, y captura de satisfacción del usuario.
+
+\newpage
+
+\section{Estructura del Proyecto}
+
+La organización de archivos responde a la siguiente jerarquía:
+
+\begin{itemize}
+    \item \texttt{/config/}: Módulo de configuración centralizada. Contiene \texttt{database.php} con clase de conexión PDO y funciones globales de sesión y utilidades de formato.
+    \item \texttt{/api/}: Directorio de endpoints JSON. Incluye \texttt{tickets.php} (CRUD autenticado), \texttt{tickets\_admin.php} (operaciones administrativas), \texttt{tickets\_publico.php} (endpoints públicos), \texttt{reportes.php} (generación de reportes Excel).
+    \item Raíz del proyecto: Archivos de vistas renderizadas servidor. \texttt{index.php} (portal público), \texttt{login.php} (autenticación), \texttt{dashboard.php} (panel usuario), \texttt{admin.php} (panel administrativo), \texttt{api.php} (ruteador central alternativo).
+    \item \texttt{/uploads/}: Directorio para almacenamiento de archivos adjuntos de tickets (estructura creada dinámicamente).
+    \item \texttt{/vendor/}: Dependencias Composer (PhpSpreadsheet, Firebase JWT, Google Auth).
+\end{itemize}
+
+\newpage
+
+\section{Componentes Backend PHP}
+
+\subsection{config/database.php}
+
+Módulo de configuración centralizada que proporciona acceso a base de datos mediante clase PDO y funciones auxiliares de autenticación, formateo y utilidades de presentación.
+
+\begin{lstlisting}[language=PHP,caption={Inicialización de conexión PDO}]
+public function getConnection() {
+    $this->conn = new PDO("mysql:host=" . $this->host . 
+        ";dbname=" . $this->db_name, $this->username, $this->password);
+    $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    return $this->conn;
+}
+\end{lstlisting}
+
+Implementa funciones globales: \texttt{iniciarSesion()} para gestión de sesiones PHP, \texttt{verificarSesion()} para validación de autenticación, \texttt{esIT()} para validación de rol técnico, \texttt{formatearFecha()} para estandarización de fechas y \texttt{obtenerColorPrioridad()}, \texttt{obtenerColorEstado()} para mapeo de estados a estilos visuales.
+
+\subsection{api.php}
+
+Ruteador centralizado de API que implementa gestión de logging, conexión a base de datos, manejo de tokens FCM, configuración de almacenamiento de archivos y endpoints CORS.
+
+\begin{lstlisting}[language=PHP,caption={Encabezados CORS y logging}]
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+function debug_log($message) {
+    $timestamp = date('Y-m-d H:i:s');
+    file_put_contents($log_file, "[{$timestamp}] {$message}\n", FILE_APPEND);
+}
+\end{lstlisting}
+
+Proporciona funciones de conexión PDO reutilizable, respuesta JSON normalizada, gestión de tokens Firebase Cloud Messaging y configuración de límites de tamaño de archivos (100MB máximo) con tipos permitidos.
+
+\subsection{api/tickets.php}
+
+Endpoint de gestión de tickets autenticado mediante sesión. Requiere validación previa de usuario en \texttt{\$\_SESSION['usuario\_id']}.
+
+\begin{lstlisting}[language=PHP,caption={Ruteo de operaciones de tickets}]
+$action = $_GET['action'] ?? '';
+switch($method) {
+    case 'GET':
+        if ($action === 'mis-tickets') { obtenerMisTickets($db); }
+        elseif ($action === 'estadisticas') { obtenerEstadisticas($db); }
+    case 'POST':
+        if ($action === 'crear') { crearTicket($db); }
+        elseif ($action === 'tomar' && isset($_GET['id'])) { tomarTicket($db, $_GET['id']); }
+}
+\end{lstlisting}
+
+Implementa operaciones de lectura (lista de tickets por usuario, estadísticas, detalles) y escritura (creación, asignación, resolución, cierre) con validación de permiso basada en rol de sesión.
+
+\subsection{api/tickets\_admin.php}
+
+Endpoint de operaciones administrativas con validación de sesión de administrador (\texttt{\$\_SESSION['admin\_id']}).
+
+\begin{lstlisting}[language=PHP,caption={Validación de permiso administrativo}]
+if (!isset($_SESSION['admin_id'])) {
+    echo json_encode(['success' => false, 'message' => 'No autorizado']);
+    exit();
+}
+\end{lstlisting}
+
+Proporciona funciones de obtención de todos los tickets, estadísticas generales, toma de tickets asignando a usuario administrativo actual, y resolución de incidencias con transacciones de base de datos para consistencia.
+
+\subsection{api/tickets\_publico.php}
+
+Endpoint sin autenticación que permite creación de tickets y consulta por número de ficha y nombre de solicitante.
+
+\begin{lstlisting}[language=PHP,caption={Búsqueda de tickets públicos}]
+function obtenerTicketsPorFicha($db) {
+    $numeroFicha = $_GET['numero_ficha'] ?? '';
+    $nombre = $_GET['nombre'] ?? '';
+    $stmt->bindParam(1, $numeroFicha);
+    $stmt->bindParam(2, $nombre);
+}
+\end{lstlisting}
+
+Implementa creación de tickets con validación de campos requeridos, procesamiento de archivos adjuntos, obtención de detalles de tickets, verificación de nombres similares mediante búsqueda de similitud parcial, y obtención de estado de personal IT disponible.
+
+\subsection{api/reportes.php}
+
+Módulo de generación de reportes en formato XLSX mediante librería PhpSpreadsheet con autenticación de administrador.
+
+\begin{lstlisting}[language=PHP,caption={Generación de archivo Excel}]
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+$spreadsheet = new Spreadsheet();
+$sheet = $spreadsheet->getActiveSheet();
+$writer = new Xlsx($spreadsheet);
+$writer->save('php://output');
+\end{lstlisting}
+
+Proporciona consultas filtradas por estado y rango de fechas, formateo de datos en columnas, estilos de encabezado y descarga de archivo con headers HTTP apropiados.
+
+\subsection{login.php}
+
+Vista y controlador de autenticación de usuarios registrados del sistema.
+
+\begin{lstlisting}[language=PHP,caption={Validación de credenciales}]
+if (password_verify($password, $row['password'])) {
+    $_SESSION['usuario_id'] = $row['id'];
+    $_SESSION['nombre'] = $row['nombre'];
+    $_SESSION['rol'] = $row['rol'];
+}
+\end{lstlisting}
+
+Implementa validación de credenciales con hashing de contraseña, almacenamiento de datos de usuario en sesión, registro de último acceso en base de datos y respuesta JSON para consumo por JavaScript cliente.
+
+\subsection{logout.php}
+
+Controlador de finalización de sesión que destruye variables de sesión, elimina cookie de sesión y redirige a login.
+
+\begin{lstlisting}[language=PHP,caption={Destrucción de sesión}]
+$_SESSION = array();
+session_destroy();
+header("Location: login.php");
+\end{lstlisting}
+
+Implementa limpieza completa de sesión PHP conforme a estándar de seguridad para prevención de reutilización de sesiones.
+
+\subsection{crear\_usuarios.php}
+
+Script utilitario de inicialización que crea usuarios técnicos en base de datos con roles y contraseñas hasheadas.
+
+\begin{lstlisting}[language=PHP,caption={Hash de contraseña}]
+$passwordHash = password_hash($usuario['password'], PASSWORD_DEFAULT);
+$stmt->bindParam(3, $passwordHash);
+\end{lstlisting}
+
+Realiza inserción en lote de usuarios con rol \texttt{it} y estado inicial \texttt{disponible}.
+
+\newpage
+
+\section{Componentes Frontend - Vistas HTML/PHP}
+
+\subsection{index.php}
+
+Portal público de acceso sin autenticación que facilita creación de tickets y consulta de estado de solicitudes existentes.
+
+\begin{lstlisting}[language=HTML,caption={Identificación de usuario público}]
+<label class="form-label fw-bold">Número de Ficha *</label>
+<input type="text" class="form-control" id="numeroFicha" 
+    placeholder="Ingresa tu número de ficha">
+<label class="form-label fw-bold">Nombre Completo *</label>
+<input type="text" class="form-control" id="nombreCompleto" 
+    placeholder="Ingresa tu nombre completo">
+\end{lstlisting}
+
+Proporciona interfaz de identificación mediante ficha y nombre, formulario de creación de tickets con categoría, prioridad y adjuntos, lista de tickets filtrable por período, visualización de personal IT disponible, y modal de detalle de ticket.
+
+\subsection{login.php}
+
+Página de autenticación de usuarios registrados con interfaz de ingreso de credenciales y formulario AJAX.
+
+\begin{lstlisting}[language=HTML,caption={Formulario de login}]
+<input type="email" class="form-control" id="email" 
+    name="email" placeholder="Email" required>
+<input type="password" class="form-control" id="password" 
+    name="password" placeholder="Contraseña" required>
+\end{lstlisting}
+
+Implementa captura de email y contraseña, consumo asincrónico de endpoint de login, visualización de mensajes de estado y redirección basada en rol de usuario.
+
+\subsection{dashboard.php}
+
+Panel de usuario autenticado que presenta lista de tickets propios, estadísticas personales y detalles de asignaciones.
+
+\begin{lstlisting}[language=HTML,caption={Estructura de navbar con navegación}]
+<nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
+    <a class="navbar-brand" href="#dashboard">
+        <i class="fas fa-headset me-2"></i>
+        <strong>Sistema IT</strong>
+    </a>
+</nav>
+\end{lstlisting}
+
+Proporciona navegación mediante pestañas para secciones diferenciadas, visualización de tickets con badges de estado y prioridad, detalles completos con timeline de eventos, formulario de satisfacción y descarga de reportes.
+
+\subsection{admin.php}
+
+Panel administrativo con autenticación separada para personal IT con operaciones de asignación y resolución de tickets.
+
+\begin{lstlisting}[language=HTML,caption={Verificación de login administrativo}]
+if (!isset($_SESSION['admin_id'])) {
+    // Mostrar formulario de login administrativo
+}
+\end{lstlisting}
+
+Implementa autenticación de administrador mediante formulario, visualización de todos los tickets en cola, operaciones de tomar asignación, registrar resolución con notas técnicas, actualización de estado de disponibilidad del personal IT y captura de satisfacción del usuario final.
+
+\newpage
+
+\section{Componentes JavaScript}
+
+\subsection{index.php - Funciones de Operación Pública}
+
+Conjunto de funciones JavaScript embebidas que gestionan flujo de usuario público sin autenticación.
+
+\begin{lstlisting}[language=JavaScript,caption={Acceso al sistema por ficha}]
+async function accederSistema() {
+    const numeroFicha = document.getElementById('numeroFicha').value.trim();
+    const nombreCompleto = document.getElementById('nombreCompleto').value.trim();
+    usuarioActual = { numeroFicha: numeroFicha, nombre: nombreCompleto };
+    document.getElementById('contenidoDinamico').style.display = 'block';
+    cargarTicketsUsuario();
+}
+\end{lstlisting}
+
+Implementa funciones: \texttt{accederSistema()} para identificación, \texttt{cargarTicketsUsuario()} para consulta de API pública, \texttt{mostrarTickets()} para renderizado de lista, \texttt{filtrarTicketsPorFecha()} para filtrado de período, \texttt{cargarPersonalIT()} para visualización de disponibilidad técnica.
+
+\subsection{index.php - Creación de Ticket Público}
+
+Función de captura de formulario y envío asincrónico a endpoint de creación.
+
+\begin{lstlisting}[language=JavaScript,caption={Envío de formulario de ticket}]
+document.getElementById('formNuevoTicket').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const response = await fetch('api/tickets_publico.php?action=crear', {
+        method: 'POST',
+        body: formData
+    });
+});
+\end{lstlisting}
+
+Implementa captura de archivos múltiples, construcción de FormData, consumo de endpoint con validación de respuesta y redirección a lista de tickets tras creación exitosa.
+
+\subsection{login.php - Validación de Login}
+
+Manejador de evento submit del formulario de autenticación.
+
+\begin{lstlisting}[language=JavaScript,caption={Procesamiento de login}]
+document.getElementById('loginForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    fetch('login.php', { method: 'POST', body: formData })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = 'dashboard.php';
+            }
+        });
+});
+\end{lstlisting}
+
+Envía credenciales a endpoint de login, procesa respuesta JSON y redirige a dashboard en caso de autenticación exitosa.
+
+\subsection{dashboard.php - Operaciones Autenticadas}
+
+Conjunto de funciones para operaciones de usuario autenticado dentro del panel de usuario.
+
+\begin{lstlisting}[language=JavaScript,caption={Carga de estadísticas}]
+async function cargarEstadisticas() {
+    const response = await fetch('api/tickets.php?action=estadisticas');
+    const data = await response.json();
+    if (data.success) {
+        actualizarEstadisticas(data.data);
+    }
+}
+\end{lstlisting}
+
+Implementa carga de estadísticas de usuario, obtención de detalles de ticket, envío de satisfacción, descarga de reportes y cierre de tickets.
+
+\subsection{admin.php - Operaciones Administrativas}
+
+Funciones de control para operaciones administrativas de asignación y resolución.
+
+\begin{lstlisting}[language=JavaScript,caption={Toma de asignación}]
+async function tomarTicket(ticketId) {
+    const response = await fetch(`api/tickets_admin.php?action=tomar&id=${ticketId}`, {
+        method: 'POST'
+    });
+    const data = await response.json();
+}
+\end{lstlisting}
+
+Implementa toma de tickets de cola abierta, resolución con notas técnicas, registro de satisfacción del usuario y actualización de estado de disponibilidad del técnico.
+
+\newpage
+
+\section{Componentes de Estilo CSS}
+
+\subsection{Estilos Embebidos index.php}
+
+Estilos globales para portal público con paleta de colores y componentes visuales.
+
+\begin{lstlisting}[language=CSS,caption={Variables de color y gradientes}]
+:root {
+    --primary-color: #667eea;
+    --secondary-color: #764ba2;
+    --success-color: #28a745;
+    --warning-color: #ffc107;
+    --danger-color: #dc3545;
+}
+body { 
+    background: linear-gradient(135deg, var(--primary-color), 
+        var(--secondary-color));
+}
+\end{lstlisting}
+
+Define variables CSS para consistencia de colores, fondos con gradiente, estilos de tarjetas con sombra y efecto hover, estilos de prioridad mediante bordes coloreados, estilos de formularios con border-radius y padding normalizado.
+
+\subsection{Estilos Embebidos dashboard.php}
+
+Estilos específicos para panel de usuario autenticado con componentes de navegación y estados.
+
+\begin{lstlisting}[language=CSS,caption={Estilos de estado IT}]
+.status-disponible { background-color: var(--success-color); }
+.status-ocupado { background-color: var(--warning-color); }
+.status-ausente { background-color: var(--danger-color); }
+.ticket-estado-abierto { background-color: rgba(13, 110, 253, 0.1); }
+.ticket-estado-en_proceso { background-color: rgba(255, 193, 7, 0.1); }
+\end{lstlisting}
+
+Implementa estilos de barra de navegación con gradiente, tarjetas con efecto elevación en hover, indicadores visuales de estado de técnicos, estilos de timeline para historial de eventos, estilos responsive para dispositivos móviles.
+
+\subsection{Estilos Embebidos admin.php}
+
+Estilos para panel administrativo con énfasis en legibilidad y funcionalidad operativa.
+
+\begin{lstlisting}[language=CSS,caption={Estilos de card dashboard}]
+.card-dashboard {
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    transition: transform 0.3s ease;
+}
+.card-dashboard:hover {
+    transform: translateY(-5px);
+}
+\end{lstlisting}
+
+Define estilos de tarjeta con sombra suave, transiciones de transform para feedback visual, estilos de botón flotante fijo, estilos de tabla de datos y componentes modales.
+
+\subsection{Estilos Embebidos login.php}
+
+Estilos para página de autenticación con formulario centrado.
+
+\begin{lstlisting}[language=CSS,caption={Estilo de card de login}]
+body {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+}
+.login-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+}
+\end{lstlisting}
+
+Implementa fondo de pantalla completa con gradiente, centering vertical de formulario, efecto de vidrio translúcido mediante backdrop-filter, estilos de input y botón con border-radius normalizado.
+
+\newpage
+
+\section{Configuración de Librerías y Dependencias}
+
+\subsection{composer.json}
+
+Archivo de declaración de dependencias de proyecto.
+
+\begin{lstlisting}[language=PHP,caption={Declaración de dependencias}]
+{
+    "require": {
+        "phpoffice/phpspreadsheet": "^4.3",
+        "firebase/php-jwt": "^6.11",
+        "google/auth": "^1.47"
+    }
+}
+\end{lstlisting}
+
+Declara tres librerías principales: PhpSpreadsheet para generación de reportes Excel, Firebase JWT para manejo de tokens, Google Auth para integración con servicios Google Cloud.
+
+\subsection{service-account-key.json}
+
+Archivo de configuración de credenciales Google Cloud para Firebase Cloud Messaging.
+
+Almacena clave privada y configuración de proyecto de Firebase necesaria para envío de notificaciones push a clientes móviles.
+
+\newpage
+
+\section{Integración de Librerías Externas}
+
+\subsection{Bootstrap 5.3.0}
+
+Framework CSS utilizado como CDN en todas las vistas. Proporciona sistema de grid responsivo, componentes de formulario, navegación, modales y utilidades de diseño.
+
+\begin{lstlisting}[language=HTML,caption={Inclusión de Bootstrap}]
+<link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" 
+    rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js">
+</script>
+\end{lstlisting}
+
+\subsection{FontAwesome 6.0.0}
+
+Librería de iconografía utilizada en interfaz mediante clases CSS de iconos. Proporciona iconos de acción, estado y navegación.
+
+\begin{lstlisting}[language=HTML,caption={Inclusión de FontAwesome}]
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" 
+    rel="stylesheet">
+<i class="fas fa-headset me-2"></i>
+\end{lstlisting}
+
+\subsection{PhpSpreadsheet}
+
+Librería para generación programática de archivos Excel. Utilizada en módulo de reportes para creación de hojas de cálculo con formato.
+
+\begin{lstlisting}[language=PHP,caption={Uso de PhpSpreadsheet}]
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+$spreadsheet = new Spreadsheet();
+$sheet = $spreadsheet->getActiveSheet();
+$writer = new Xlsx($spreadsheet);
+\end{lstlisting}
+
+\newpage
+
+\section{Flujo de Operación General del Sistema}
+
+\subsection{Portal Público}
+
+\begin{enumerate}
+    \item Usuario ingresa número de ficha y nombre completo en formulario de identificación.
+    \item Sistema valida existencia de tickets mediante endpoint \texttt{api/tickets\_publico.php?action=mis-tickets}.
+    \item Se carga lista de tickets del usuario con estado y detalles.
+    \item Usuario puede crear nuevo ticket mediante formulario con título, descripción, prioridad, categoría y archivos adjuntos.
+    \item Sistema envía datos a \texttt{api/tickets\_publico.php?action=crear} mediante POST con FormData.
+    \item Endpoint valida campos requeridos, crea registro en tabla tickets y archivos adjuntos.
+    \item Se obtiene estado actual de personal IT disponible mediante \texttt{api/tickets\_publico.php?action=personal-it}.
+\end{enumerate}
+
+\subsection{Portal de Usuario Autenticado}
+
+\begin{enumerate}
+    \item Usuario autentica con email y contraseña en \texttt{login.php}.
+    \item Endpoint \texttt{login.php} valida credenciales, hashs de contraseña y crea sesión con \texttt{\$\_SESSION['usuario\_id']}.
+    \item Se redirige a \texttt{dashboard.php} que consume \texttt{api/tickets.php?action=mis-tickets}.
+    \item Se cargan estadísticas mediante \texttt{api/tickets.php?action=estadisticas}.
+    \item Usuario visualiza lista de tickets propios con opción de ver detalle en modal.
+    \item Puede enviar satisfacción mediante endpoint POST a \texttt{api/tickets.php?action=cerrar}.
+\end{enumerate}
+
+\subsection{Panel Administrativo}
+
+\begin{enumerate}
+    \item Técnico IT autentica con email y contraseña en \texttt{admin.php}.
+    \item Sesión se crea con \texttt{\$\_SESSION['admin\_id']}.
+    \item Sistema carga lista de todos los tickets mediante \texttt{api/tickets\_admin.php?action=todos}.
+    \item Técnico toma asignación de ticket mediante \texttt{api/tickets\_admin.php?action=tomar\&id=X}.
+    \item Se actualiza estado de ticket a \texttt{en\_proceso} y usuario a \texttt{ocupado}.
+    \item Técnico ingresa resolución mediante \texttt{api/tickets\_admin.php?action=resolver\&id=X}.
+    \item Sistema actualiza estado a \texttt{resuelto}, técnico regresa a estado \texttt{disponible}.
+\end{enumerate}
+
+\newpage
+
+\section{Seguridad Implementada}
+
+\subsection{Autenticación}
+
+Sistema implementa autenticación basada en sesiones PHP mediante \texttt{session\_start()} con validación de \texttt{\$\_SESSION['usuario\_id']} en endpoints autenticados. Las contraseñas se almacenan con hash mediante \texttt{password\_hash()} con algoritmo \texttt{PASSWORD\_DEFAULT}.
+
+\subsection{Autorización}
+
+Validación de rol mediante \texttt{\$\_SESSION['rol']} para diferenciación entre usuarios solicitantes y personal IT. Endpoints administrativos validan \texttt{\$\_SESSION['admin\_id']} previo a operaciones.
+
+\subsection{Prepared Statements}
+
+Todas las consultas SQL utilizan prepared statements con bindParam para prevención de inyección SQL.
+
+\begin{lstlisting}[language=PHP,caption={Ejemplo de prepared statement}]
+$stmt = $db->prepare("SELECT * FROM usuarios WHERE email = ?");
+$stmt->bindParam(1, $email);
+$stmt->execute();
+\end{lstlisting}
+
+\subsection{Validación de Entrada}
+
+Validación de campos requeridos antes de inserción o actualización mediante verificación de vacío y trimming de espacios.
+
+\subsection{CORS}
+
+Headers CORS configurados en \texttt{api.php} para permitir acceso desde origen especificado.
+
+\begin{lstlisting}[language=PHP,caption={Headers CORS}]
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+\end{lstlisting}
+
+\newpage
+
+\section{Gestión de Archivos Adjuntos}
+
+Archivos adjuntos se almacenan en directorio \texttt{/uploads/tickets/} con validación de tipo MIME y tamaño máximo de 100MB por archivo. Extensiones permitidas incluyen imágenes (jpg, jpeg, png, gif, webp), documentos (pdf, doc, docx, xls, xlsx, ppt, pptx, txt) y video (mp4, avi, mov, wmv, flv, webm).
+
+\begin{lstlisting}[language=PHP,caption={Configuración de archivos}]
+$upload_config = [
+    'max_file_size' => 100 * 1024 * 1024,
+    'allowed_types' => ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx', ...],
+    'upload_path' => __DIR__ . '/uploads/tickets/'
+];
+\end{lstlisting}
+
+\newpage
+
+\section{Modelo de Datos}
+
+\subsection{Tabla usuarios}
+
+Almacena información de usuarios del sistema con campos: id (clave primaria), nombre, email (único), password (hasheado), rol (it o solicitante), estado (disponible, ocupado, ausente), ultimo\_acceso (timestamp).
+
+\subsection{Tabla tickets}
+
+Registro central de solicitudes con campos: id (clave primaria), numero\_ficha, solicitante\_nombre, titulo, descripcion, prioridad (urgente, alta, media, baja), categoria, estado (abierto, en\_proceso, resuelto, cerrado), asignado\_a (referencia a usuarios.id), fecha\_creacion, fecha\_asignacion, fecha\_resolucion, fecha\_cierre, resolucion (texto), satisfaccion (satisfactoria, insatisfactoria).
+
+\subsection{Tabla archivos\_adjuntos}
+
+Registro de archivos asociados con campos: id (clave primaria), ticket\_id (referencia a tickets.id), nombre\_archivo, ruta, fecha\_carga, tipo\_mime.
+
+\subsection{Tabla fcm\_tokens}
+
+Almacena tokens de Firebase Cloud Messaging para notificaciones push con campos: id (clave primaria), token (único), created\_at, last\_used.
+
+\newpage
+
+\section{Observaciones Técnicas Finales}
+
+\subsection{Arquitectura}
+
+El sistema implementa arquitectura de tres capas: capa de presentación (vistas HTML/PHP), capa de lógica (endpoints API), capa de datos (PDO a MySQL). No existe separación explícita de modelos mediante ORM, utilizándose consultas SQL directo mediante PDO.
+
+\subsection{Manejo de Errores}
+
+Los errores de base de datos se capturan mediante try-catch en operaciones transaccionales. Los errores de validación se reportan mediante respuestas JSON con clave \texttt{success} booleana y mensaje descriptivo.
+
+\subsection{Transacciones}
+
+Operaciones críticas como asignación y resolución de tickets implementan transacciones explícitas mediante \texttt{\$db->beginTransaction()} y \texttt{\$db->commit()}/\texttt{rollback()}.
+
+\subsection{Logs}
+
+Sistema implementa logging mediante archivo \texttt{api\_debug.log} en directorio raíz con timestamps y mensajes de operación crítica.
+
+\subsection{Validación de Cliente}
+
+El código JavaScript valida campos requeridos antes de envío mediante verificación de trim y valor vacío. Las validaciones críticas se replican en servidor.
+
+\end{document}
